@@ -38,8 +38,12 @@ export default function TablesPage() {
 
   const openQR = async (table: Table) => {
     setShowQR(table);
-    const url = await generateQRDataUrl(table.qrToken);
-    setQrDataUrl(url);
+    try {
+      const url = await generateQRDataUrl(table.qrToken);
+      setQrDataUrl(url);
+    } catch (e) {
+      toast.error("QR generation failed — check NEXT_PUBLIC_APP_URL in your environment variables");
+    }
   };
 
   const addTable = async () => {

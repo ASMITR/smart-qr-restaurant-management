@@ -26,7 +26,13 @@ service cloud.firestore {
     // ── Table token index (public read for QR lookup) ─────────────────────
     match /tableTokens/{token} {
       allow read: if true;
-      allow write: if false; // written only by Cloud Functions / server
+      // written by client when staff creates/regenerates a table
+      allow create, delete: if isSignedIn() &&
+        exists(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)/users/$(request.auth.uid)) &&
+        (
+          get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)/users/$(request.auth.uid)).data.role == 'OWNER' ||
+          get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)/users/$(request.auth.uid)).data.role == 'MANAGER'
+        );
     }
 
     // ── Restaurants ───────────────────────────────────────────────────────

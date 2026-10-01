@@ -8,8 +8,11 @@ export function generateQRToken(): string {
 }
 
 export function getTableUrl(token: string): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/$/, "");
-  return `${base}/table/${token}`;
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+  if (!base) throw new Error("NEXT_PUBLIC_APP_URL is not set");
+  return `${base.replace(/\/$/, "")}/table/${token}`;
 }
 
 export async function generateQRDataUrl(token: string): Promise<string> {

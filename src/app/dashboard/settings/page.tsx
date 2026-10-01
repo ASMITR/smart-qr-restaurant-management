@@ -58,18 +58,22 @@ export default function SettingsPage() {
   });
 
   const save = async () => {
-    if (!restaurantId) return;
+    if (!restaurantId) { toast.error("Not authenticated"); return; }
+    const lat = parseFloat(form.latitude);
+    const lng = parseFloat(form.longitude);
+    const radius = parseInt(form.allowedRadiusMeters);
+    if (isNaN(lat) || isNaN(lng)) { toast.error("Enter valid latitude and longitude"); return; }
+    if (isNaN(radius) || radius <= 0) { toast.error("Enter a valid radius"); return; }
     setSaving(true);
     try {
-      await restaurantService.update(restaurantId, {
+      const updateData: Parameters<typeof restaurantService.update>[1] = {
         name: form.name, address: form.address, phone: form.phone,
-        logoUrl: form.logoUrl || undefined,
-        googleReviewUrl: form.googleReviewUrl || undefined,
-        location: {
-          latitude: parseFloat(form.latitude),
-          longitude: parseFloat(form.longitude),
-          allowedRadiusMeters: parseInt(form.allowedRadiusMeters),
-        },
+        location: { latitude: lat, longitude: lng, allowedRadiusMeters: radius },
+      };
+      if (form.logoUrl) updateData.logoUrl = form.logoUrl;
+      if (form.googleReviewUrl) updateData.googleReviewUrl = form.googleReviewUrl;
+      await restaurantService.update(restaurantId, {
+        ...updateData,
         settings: {
           taxPercent: parseFloat(form.taxPercent) || 0,
           serviceChargePercent: parseFloat(form.serviceChargePercent) || 0,
@@ -80,8 +84,10 @@ export default function SettingsPage() {
       toast.success("Settings saved");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch { toast.error("Failed to save settings"); }
-    finally { setSaving(false); }
+    } catch (err) {
+      console.error("Settings save error:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to save settings");
+    } finally { setSaving(false); }
   };
 
   return (
