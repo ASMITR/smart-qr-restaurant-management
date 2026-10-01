@@ -8,7 +8,7 @@ export function generateQRToken(): string {
 }
 
 export function getTableUrl(token: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "");
+  const base = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/$/, "");
   return `${base}/table/${token}`;
 }
 
