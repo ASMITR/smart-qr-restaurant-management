@@ -6,10 +6,16 @@ import {
 import { db } from "@/lib/firebase/config";
 import { Restaurant, RestaurantUser } from "@/types";
 
+const restaurantCache = new Map<string, Restaurant>();
+
 export const restaurantService = {
   async get(id: string): Promise<Restaurant | null> {
+    if (restaurantCache.has(id)) return restaurantCache.get(id)!;
     const snap = await getDoc(doc(db, "restaurants", id));
-    return snap.exists() ? ({ id: snap.id, ...snap.data() } as Restaurant) : null;
+    if (!snap.exists()) return null;
+    const rest = { id: snap.id, ...snap.data() } as Restaurant;
+    restaurantCache.set(id, rest);
+    return rest;
   },
 
   async create(data: Omit<Restaurant, "id" | "createdAt">): Promise<string> {

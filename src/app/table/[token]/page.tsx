@@ -33,7 +33,10 @@ export default function TablePage() {
       const result = await tableService.getByToken(token);
       if (!result) { setStep("error"); setErrorMsg("Invalid QR code. Please scan the correct QR code on your table."); return; }
       const { table: t, restaurantId: rid } = result;
-      const rest = await restaurantService.get(rid);
+      // fetch restaurant in parallel with session check
+      const [rest] = await Promise.all([
+        restaurantService.get(rid),
+      ]);
       if (!rest) { setStep("error"); setErrorMsg("Restaurant not found."); return; }
       setTable(t); setRestaurant(rest); setRestaurantId(rid);
       const stored = sessionStorage.getItem(`session_${t.id}`);
