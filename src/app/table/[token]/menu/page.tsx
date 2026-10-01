@@ -63,12 +63,19 @@ export default function MenuPage() {
       const result = await tableService.getByToken(token);
       if (!result) return;
       const { table, restaurantId: rid } = result;
-      const rest = await restaurantService.get(rid);
+      // fire all 3 fetches in parallel
+      const [rest, cats, menuItems] = await Promise.all([
+        restaurantService.get(rid),
+        menuService.getCategories(rid),
+        menuService.getItems(rid),
+      ]);
       if (!rest) return;
-      setRestaurantId(rid); setTableId(table.id); setTableNumber(table.tableNumber); setRestaurant(rest);
+      setRestaurantId(rid);
+      setTableId(table.id);
+      setTableNumber(table.tableNumber);
+      setRestaurant(rest);
       const stored = sessionStorage.getItem(`session_${table.id}`);
       if (stored) setCustomerName(JSON.parse(stored).customerName);
-      const [cats, menuItems] = await Promise.all([menuService.getCategories(rid), menuService.getItems(rid)]);
       setCategories(cats.filter((c) => c.isActive));
       setItems(menuItems);
       setLoading(false);
@@ -474,7 +481,7 @@ function MenuItemCard({ item, qty, onAdd, onRemove }: {
         "w-28 h-auto sm:w-full sm:h-40"
       )}>
         {item.imageUrl ? (
-          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+          <img src={item.imageUrl} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
         ) : (
           <ImageOff className="h-7 w-7 text-gray-200" />
         )}

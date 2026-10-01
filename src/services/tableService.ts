@@ -6,18 +6,20 @@ import { db } from "@/lib/firebase/config";
 import { Table, TableStatus } from "@/types";
 import { generateQRToken } from "@/lib/qr";
 
+// in-memory cache so token lookup only hits Firestore once per session
+const tokenCache = new Map<string, { table: Table; restaurantId: string }>();
+
 export const tableService = {
   async getByToken(token: string): Promise<{ table: Table; restaurantId: string } | null> {
-    // We need to search across restaurants — store a top-level token index
+    if (tokenCache.has(token)) return tokenCache.get(token)!;
     const snap = await getDoc(doc(db, "tableTokens", token));
     if (!snap.exists()) return null;
     const { restaurantId, tableId } = snap.data() as { restaurantId: string; tableId: string };
     const tableSnap = await getDoc(doc(db, "restaurants", restaurantId, "tables", tableId));
     if (!tableSnap.exists()) return null;
-    return {
-      table: { id: tableSnap.id, ...tableSnap.data() } as Table,
-      restaurantId,
-    };
+    const result = { table: { id: tableSnap.id, ...tableSnap.data() } as Table, restaurantId };
+    tokenCache.set(token, result);
+    return result;
   },
 
   async getAll(restaurantId: string): Promise<Table[]> {
