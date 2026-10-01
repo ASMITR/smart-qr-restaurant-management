@@ -23,7 +23,7 @@ function getFirebaseDb(): Firestore {
     return initializeFirestore(app, {});
   }
   return initializeFirestore(app, {
-    cache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
   });
 }
 
