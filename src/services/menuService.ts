@@ -5,19 +5,40 @@ import {
 import { db } from "@/lib/firebase/config";
 import { MenuCategory, MenuItem } from "@/types";
 
+const menuCache = new Map<string, { categories: MenuCategory[]; items: MenuItem[]; ts: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export const menuService = {
   async getCategories(restaurantId: string): Promise<MenuCategory[]> {
+    const cached = menuCache.get(restaurantId);
+    if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.categories;
     const snap = await getDocs(
       query(collection(db, "restaurants", restaurantId, "menuCategories"), orderBy("sortOrder"))
     );
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as MenuCategory));
+    const categories = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MenuCategory));
+    menuCache.set(restaurantId, { ...menuCache.get(restaurantId) ?? { items: [], ts: Date.now() }, categories, ts: Date.now() });
+    return categories;
   },
 
   async getItems(restaurantId: string): Promise<MenuItem[]> {
+    const cached = menuCache.get(restaurantId);
+    if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.items;
     const snap = await getDocs(
       query(collection(db, "restaurants", restaurantId, "menuItems"), orderBy("sortOrder"))
     );
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as MenuItem));
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MenuItem));
+    menuCache.set(restaurantId, { ...menuCache.get(restaurantId) ?? { categories: [], ts: Date.now() }, items, ts: Date.now() });
+    return items;
+  },
+
+  async getBoth(restaurantId: string): Promise<{ categories: MenuCategory[]; items: MenuItem[] }> {
+    const cached = menuCache.get(restaurantId);
+    if (cached && Date.now() - cached.ts < CACHE_TTL) return cached;
+    const [categories, items] = await Promise.all([
+      this.getCategories(restaurantId),
+      this.getItems(restaurantId),
+    ]);
+    return { categories, items };
   },
 
   async createCategory(restaurantId: string, data: Omit<MenuCategory, "id">): Promise<string> {
@@ -46,6 +67,10 @@ export const menuService = {
 
   async deleteItem(restaurantId: string, itemId: string): Promise<void> {
     await deleteDoc(doc(db, "restaurants", restaurantId, "menuItems", itemId));
+  },
+
+  clearCache(restaurantId?: string): void {
+    if (restaurantId) menuCache.delete(restaurantId); else menuCache.clear();
   },
 
   subscribeCategories(restaurantId: string, cb: (cats: MenuCategory[]) => void): Unsubscribe {

@@ -29,22 +29,39 @@ export default function TablePage() {
   const [locationStatus, setLocationStatus] = useState("");
 
   useEffect(() => {
+    let unsub: (() => void) | undefined;
     async function init() {
-      const result = await tableService.getByToken(token);
-      if (!result) { setStep("error"); setErrorMsg("Invalid QR code. Please scan the correct QR code on your table."); return; }
-      const { table: t, restaurantId: rid } = result;
-      // fetch restaurant in parallel with session check
-      const [rest] = await Promise.all([
-        restaurantService.get(rid),
-      ]);
+      const cached = sessionStorage.getItem(`table_${token}`);
+      let t: Table, rid: string;
+      if (cached) {
+        ({ table: t, restaurantId: rid } = JSON.parse(cached));
+        setTable(t); setRestaurantId(rid);
+      } else {
+        const result = await tableService.getByToken(token);
+        if (!result) { setStep("error"); setErrorMsg("Invalid QR code. Please scan the correct QR code on your table."); return; }
+        t = result.table; rid = result.restaurantId;
+        sessionStorage.setItem(`table_${token}`, JSON.stringify({ table: { id: t.id, tableNumber: t.tableNumber }, restaurantId: rid }));
+        setTable(t); setRestaurantId(rid);
+      }
+      const rest = await restaurantService.get(rid);
       if (!rest) { setStep("error"); setErrorMsg("Restaurant not found."); return; }
-      setTable(t); setRestaurant(rest); setRestaurantId(rid);
+      setRestaurant(rest);
       const stored = sessionStorage.getItem(`session_${t.id}`);
       if (stored) { router.replace(`/table/${token}/menu?session=${JSON.parse(stored).sessionId}`); return; }
       if (t.status === "OCCUPIED" || t.status === "PAYMENT_PENDING") { setStep("occupied"); return; }
       setStep("enter-name");
+      // subscribe to live table status — blocks if another customer takes the table
+      unsub = tableService.subscribeOne(rid, t.id, (live) => {
+        if (!live) return;
+        setTable(live);
+        if (live.status === "OCCUPIED" || live.status === "PAYMENT_PENDING") {
+          const s = sessionStorage.getItem(`session_${live.id}`);
+          if (!s) setStep("occupied");
+        }
+      });
     }
     init();
+    return () => unsub?.();
   }, [token, router]);
 
   const handleVerifyLocation = async (bypass = false) => {

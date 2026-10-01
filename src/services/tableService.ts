@@ -6,20 +6,24 @@ import { db } from "@/lib/firebase/config";
 import { Table, TableStatus } from "@/types";
 import { generateQRToken } from "@/lib/qr";
 
-// in-memory cache so token lookup only hits Firestore once per session
-const tokenCache = new Map<string, { table: Table; restaurantId: string }>();
+// cache only the token→id mapping, never the table doc (status changes)
+const tokenCache = new Map<string, { restaurantId: string; tableId: string }>();
 
 export const tableService = {
   async getByToken(token: string): Promise<{ table: Table; restaurantId: string } | null> {
-    if (tokenCache.has(token)) return tokenCache.get(token)!;
-    const snap = await getDoc(doc(db, "tableTokens", token));
-    if (!snap.exists()) return null;
-    const { restaurantId, tableId } = snap.data() as { restaurantId: string; tableId: string };
+    let restaurantId: string, tableId: string;
+    if (tokenCache.has(token)) {
+      ({ restaurantId, tableId } = tokenCache.get(token)!);
+    } else {
+      const snap = await getDoc(doc(db, "tableTokens", token));
+      if (!snap.exists()) return null;
+      ({ restaurantId, tableId } = snap.data() as { restaurantId: string; tableId: string });
+      tokenCache.set(token, { restaurantId, tableId });
+    }
+    // always fetch fresh table doc so status is never stale
     const tableSnap = await getDoc(doc(db, "restaurants", restaurantId, "tables", tableId));
     if (!tableSnap.exists()) return null;
-    const result = { table: { id: tableSnap.id, ...tableSnap.data() } as Table, restaurantId };
-    tokenCache.set(token, result);
-    return result;
+    return { table: { id: tableSnap.id, ...tableSnap.data() } as Table, restaurantId };
   },
 
   async getAll(restaurantId: string): Promise<Table[]> {
@@ -78,6 +82,12 @@ export const tableService = {
         .map((d) => ({ id: d.id, ...d.data() } as Table))
         .sort((a, b) => a.tableNumber - b.tableNumber);
       cb(tables);
+    });
+  },
+
+  subscribeOne(restaurantId: string, tableId: string, cb: (table: Table | null) => void): Unsubscribe {
+    return onSnapshot(doc(db, "restaurants", restaurantId, "tables", tableId), (snap) => {
+      cb(snap.exists() ? ({ id: snap.id, ...snap.data() } as Table) : null);
     });
   },
 };

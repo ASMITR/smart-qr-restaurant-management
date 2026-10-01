@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
-import { getFirestore, Firestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { initializeFirestore, Firestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getStorage, FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -17,17 +17,21 @@ function getFirebaseApp(): FirebaseApp {
   return initializeApp(firebaseConfig);
 }
 
+function getFirebaseDb(): Firestore {
+  const app = getFirebaseApp();
+  if (typeof window === "undefined") {
+    return initializeFirestore(app, {});
+  }
+  return initializeFirestore(app, {
+    cache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  });
+}
+
 export const getFirebaseAuth = (): Auth => getAuth(getFirebaseApp());
-export const getFirebaseDb = (): Firestore => getFirestore(getFirebaseApp());
 export const getFirebaseStorage = (): FirebaseStorage => getStorage(getFirebaseApp());
 
 export const auth: Auth = getFirebaseAuth();
 export const db: Firestore = getFirebaseDb();
 export const storage: FirebaseStorage = getFirebaseStorage();
-
-// enable offline persistence for faster repeat loads on mobile
-if (typeof window !== "undefined") {
-  enableIndexedDbPersistence(db).catch(() => {});
-}
 
 export default { auth, db, storage };

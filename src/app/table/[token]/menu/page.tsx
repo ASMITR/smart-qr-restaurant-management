@@ -59,28 +59,34 @@ export default function MenuPage() {
 
   useEffect(() => {
     if (!sessionId) { router.replace(`/table/${token}`); return; }
+    let unsub: (() => void) | undefined;
     async function init() {
-      const result = await tableService.getByToken(token);
-      if (!result) return;
-      const { table, restaurantId: rid } = result;
-      // fire all 3 fetches in parallel
-      const [rest, cats, menuItems] = await Promise.all([
-        restaurantService.get(rid),
-        menuService.getCategories(rid),
-        menuService.getItems(rid),
-      ]);
-      if (!rest) return;
+      let rid: string, tableData: { id: string; tableNumber: number };
+      const cachedTable = sessionStorage.getItem(`table_${token}`);
+      if (cachedTable) {
+        ({ restaurantId: rid, table: tableData } = JSON.parse(cachedTable));
+      } else {
+        const result = await tableService.getByToken(token);
+        if (!result) return;
+        rid = result.restaurantId;
+        tableData = result.table;
+        // only cache id+tableNumber, never status (status must always be fresh)
+        sessionStorage.setItem(`table_${token}`, JSON.stringify({ table: { id: result.table.id, tableNumber: result.table.tableNumber }, restaurantId: rid }));
+      }
+      // fetch menu (cached after first load) in parallel with restaurant subscription
+      const { categories: cats, items: menuItems } = await menuService.getBoth(rid);
       setRestaurantId(rid);
-      setTableId(table.id);
-      setTableNumber(table.tableNumber);
-      setRestaurant(rest);
-      const stored = sessionStorage.getItem(`session_${table.id}`);
+      setTableId(tableData.id);
+      setTableNumber(tableData.tableNumber);
+      const stored = sessionStorage.getItem(`session_${tableData.id}`);
       if (stored) setCustomerName(JSON.parse(stored).customerName);
       setCategories(cats.filter((c) => c.isActive));
       setItems(menuItems);
       setLoading(false);
+      unsub = restaurantService.subscribeToRestaurant(rid, (r) => { if (r) setRestaurant(r); });
     }
     init();
+    return () => unsub?.();
   }, [token, sessionId, router]);
 
   useEffect(() => {

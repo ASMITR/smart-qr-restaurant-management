@@ -8,7 +8,7 @@ import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { Restaurant, Order, Payment, PaymentMethod } from "@/types";
 import { LoadingScreen } from "@/components/ui/spinner";
-import { formatCurrency, formatTime } from "@/utils";
+import { formatCurrency } from "@/utils";
 import { cn } from "@/utils";
 import {
   CheckCircle, Star, ExternalLink, UtensilsCrossed,
@@ -195,26 +195,26 @@ export default function BillPage() {
             <div className="absolute -top-8 -right-8 h-32 w-32 rounded-full bg-white/5" />
             <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-black/10 to-transparent" />
 
-            <div className="relative flex items-start justify-between">
+            <div className="relative flex items-start justify-between gap-3">
               {/* Logo + name */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 {restaurant?.logoUrl ? (
-                  <img src={restaurant.logoUrl} alt={restaurant.name} className="h-11 w-11 rounded-xl object-cover ring-2 ring-white/20" />
+                  <img src={restaurant.logoUrl} alt={restaurant.name} className="h-11 w-11 rounded-xl object-cover ring-2 ring-white/20 shrink-0" />
                 ) : (
-                  <div className="h-11 w-11 rounded-xl bg-white/10 flex items-center justify-center">
+                  <div className="h-11 w-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
                     <UtensilsCrossed className="h-5 w-5 text-white/80" strokeWidth={1.5} />
                   </div>
                 )}
-                <div>
-                  <p className="text-white text-[15px] leading-tight">{restaurant?.name}</p>
+                <div className="min-w-0">
+                  <p className="text-white text-[15px] leading-tight truncate">{restaurant?.name}</p>
                   {restaurant?.address && (
-                    <p className="text-white/50 text-[11px] mt-0.5 flex items-center gap-1">
-                      <MapPin className="h-2.5 w-2.5" />{restaurant.address}
+                    <p className="text-white/50 text-[11px] mt-0.5 flex items-center gap-1 truncate">
+                      <MapPin className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{restaurant.address}</span>
                     </p>
                   )}
                   {restaurant?.phone && (
                     <p className="text-white/50 text-[11px] flex items-center gap-1">
-                      <Phone className="h-2.5 w-2.5" />{restaurant.phone}
+                      <Phone className="h-2.5 w-2.5 shrink-0" />{restaurant.phone}
                     </p>
                   )}
                 </div>
@@ -242,11 +242,11 @@ export default function BillPage() {
           {/* ── Items table ── */}
           <div className="px-5 pt-2 pb-4">
             {/* Table header */}
-            <div className="grid grid-cols-12 gap-2 pb-2 border-b border-gray-100">
-              <span className="col-span-6 text-[10px] text-gray-400 uppercase tracking-wide">Item</span>
+            <div className="grid grid-cols-12 gap-1 pb-2 border-b border-gray-100">
+              <span className="col-span-5 text-[10px] text-gray-400 uppercase tracking-wide">Item</span>
               <span className="col-span-2 text-[10px] text-gray-400 uppercase tracking-wide text-center">Qty</span>
               <span className="col-span-2 text-[10px] text-gray-400 uppercase tracking-wide text-right">Rate</span>
-              <span className="col-span-2 text-[10px] text-gray-400 uppercase tracking-wide text-right">Amt</span>
+              <span className="col-span-3 text-[10px] text-gray-400 uppercase tracking-wide text-right">Amt</span>
             </div>
 
             {servedOrders.length === 0 ? (
@@ -256,22 +256,12 @@ export default function BillPage() {
               </div>
             ) : (
               <div className="divide-y divide-gray-50">
-                {servedOrders.map((order, oi) => (
-                  <div key={order.id}>
-                    {servedOrders.length > 1 && (
-                      <p className="text-[10px] text-gray-400 pt-3 pb-1.5 flex items-center gap-1.5">
-                        <span className="h-1 w-1 rounded-full bg-orange-400" />
-                        Order {oi + 1} · {formatTime(order.createdAt)}
-                      </p>
-                    )}
-                    {order.items.map((item) => (
-                      <div key={item.id} className="grid grid-cols-12 gap-2 py-2.5 items-center">
-                        <span className="col-span-6 text-sm text-gray-700 leading-tight">{item.name}</span>
-                        <span className="col-span-2 text-sm text-gray-500 text-center tabular-nums">{item.quantity}</span>
-                        <span className="col-span-2 text-sm text-gray-500 text-right tabular-nums">{formatCurrency(item.priceAtOrderTime)}</span>
-                        <span className="col-span-2 text-sm text-gray-700 text-right tabular-nums">{formatCurrency(item.priceAtOrderTime * item.quantity)}</span>
-                      </div>
-                    ))}
+                {servedOrders.flatMap((order) => order.items).map((item, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-1 py-2 items-start">
+                    <span className="col-span-5 text-xs text-gray-700 leading-snug break-words">{item.name}</span>
+                    <span className="col-span-2 text-xs text-gray-500 text-center tabular-nums">{item.quantity}</span>
+                    <span className="col-span-2 text-xs text-gray-500 text-right tabular-nums">{formatCurrency(item.priceAtOrderTime)}</span>
+                    <span className="col-span-3 text-xs text-gray-700 text-right tabular-nums">{formatCurrency(item.priceAtOrderTime * item.quantity)}</span>
                   </div>
                 ))}
               </div>

@@ -52,8 +52,14 @@ export const restaurantService = {
 
   subscribeToRestaurant(id: string, cb: (r: Restaurant | null) => void): Unsubscribe {
     return onSnapshot(doc(db, "restaurants", id), (snap) => {
-      cb(snap.exists() ? ({ id: snap.id, ...snap.data() } as Restaurant) : null);
+      const r = snap.exists() ? ({ id: snap.id, ...snap.data() } as Restaurant) : null;
+      if (r) restaurantCache.set(id, r); else restaurantCache.delete(id);
+      cb(r);
     });
+  },
+
+  clearCache(id?: string): void {
+    if (id) restaurantCache.delete(id); else restaurantCache.clear();
   },
 };
 

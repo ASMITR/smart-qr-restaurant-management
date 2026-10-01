@@ -9,7 +9,7 @@ import { restaurantService } from "@/services/restaurantService";
 import { Table, Order, Restaurant } from "@/types";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/badge";
-import { formatCurrency, formatTime } from "@/utils";
+import { formatCurrency } from "@/utils";
 import { cn } from "@/utils";
 import { Receipt, CheckCircle, Users, Banknote, CreditCard, Smartphone, Globe } from "lucide-react";
 import { toast } from "sonner";
@@ -153,21 +153,23 @@ export default function BillingPage() {
             <p className="text-xs text-gray-400 mt-0.5">{restaurant?.address}</p>
           </div>
 
-          {/* Orders */}
-          <div className="space-y-3 max-h-48 overflow-y-auto">
-            {sessionOrders.map((order) => (
-              <div key={order.id}>
-                <p className="text-[11px] text-gray-400 mb-1.5 font-medium">
-                  Order #{order.id.slice(-4).toUpperCase()} · {formatTime(order.createdAt)}
-                </p>
-                {order.items.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm py-1">
-                    <span className="text-gray-700">{item.name} <span className="text-gray-400">×{item.quantity}</span></span>
-                    <span className="font-semibold text-gray-900">{formatCurrency(item.priceAtOrderTime * item.quantity)}</span>
-                  </div>
-                ))}
+          {/* Combined items from all orders */}
+          <div className="space-y-1 max-h-52 overflow-y-auto">
+            <div className="grid grid-cols-12 gap-1 pb-1.5 border-b border-gray-100 text-[10px] text-gray-400 uppercase tracking-wide">
+              <span className="col-span-6">Item</span>
+              <span className="col-span-2 text-center">Qty</span>
+              <span className="col-span-4 text-right">Amount</span>
+            </div>
+            {sessionOrders.flatMap((o) => o.items).map((item, i) => (
+              <div key={i} className="grid grid-cols-12 gap-1 py-1.5 items-center">
+                <span className="col-span-6 text-sm text-gray-700 truncate">{item.name}</span>
+                <span className="col-span-2 text-sm text-gray-400 text-center">×{item.quantity}</span>
+                <span className="col-span-4 text-sm text-gray-900 text-right tabular-nums">{formatCurrency(item.priceAtOrderTime * item.quantity)}</span>
               </div>
             ))}
+            {sessionOrders.length > 1 && (
+              <p className="text-[10px] text-gray-300 pt-1 border-t border-gray-50">{sessionOrders.length} orders combined</p>
+            )}
           </div>
 
           {/* Totals */}

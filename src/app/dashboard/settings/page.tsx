@@ -3,11 +3,14 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { restaurantService } from "@/services/restaurantService";
+import { menuService } from "@/services/menuService";
 import { Restaurant } from "@/types";
 import { Input, Label } from "@/components/ui/input";
 import { cn } from "@/utils";
 import { toast } from "sonner";
-import { Store, MapPin, Star, Percent, Save, CheckCircle } from "lucide-react";
+import { Store, MapPin, Star, Percent, Save, CheckCircle, Trash2, Database, RotateCcw, AlertTriangle } from "lucide-react";
+import { collection, getDocs, writeBatch } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
 
 const Section = ({ icon: Icon, title, color, children }: {
   icon: React.ElementType; title: string; color: string; children: React.ReactNode;
@@ -33,6 +36,9 @@ export default function SettingsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
     if (!restaurantId) return;
@@ -90,15 +96,55 @@ export default function SettingsPage() {
     } finally { setSaving(false); }
   };
 
+  const clearCache = () => {
+    if (!restaurantId) return;
+    setClearing(true);
+    restaurantService.clearCache(restaurantId);
+    menuService.clearCache(restaurantId);
+    Object.keys(sessionStorage)
+      .filter((k) => k.startsWith("table_"))
+      .forEach((k) => sessionStorage.removeItem(k));
+    toast.success("Cache cleared — customers will fetch fresh data on next load");
+    setTimeout(() => setClearing(false), 1500);
+  };
+
+  const resetDemoData = async () => {
+    if (!restaurantId) return;
+    setResetting(true);
+    setConfirmReset(false);
+    try {
+      for (const col of ["orders", "sessions", "payments", "staffRequests", "auditLogs"]) {
+        const snap = await getDocs(collection(db, "restaurants", restaurantId, col));
+        if (!snap.empty) {
+          const batch = writeBatch(db);
+          snap.docs.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      }
+      const tables = await getDocs(collection(db, "restaurants", restaurantId, "tables"));
+      if (!tables.empty) {
+        const batch = writeBatch(db);
+        tables.docs.forEach((t) => batch.update(t.ref, { status: "AVAILABLE", activeSessionId: null }));
+        await batch.commit();
+      }
+      restaurantService.clearCache(restaurantId);
+      menuService.clearCache(restaurantId);
+      Object.keys(sessionStorage)
+        .filter((k) => k.startsWith("table_") || k.startsWith("session_"))
+        .forEach((k) => sessionStorage.removeItem(k));
+      toast.success("All data cleared. Tables reset to available.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Reset failed");
+    } finally { setResetting(false); }
+  };
+
   return (
     <div className="space-y-5 max-w-2xl mx-auto pb-24">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-black text-gray-900 tracking-tight">Settings</h1>
         <p className="text-gray-400 text-sm mt-0.5">Configure your restaurant</p>
       </div>
 
-      {/* General */}
       <Section icon={Store} title="General" color="bg-gradient-to-br from-orange-500 to-orange-600">
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
@@ -120,7 +166,6 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      {/* Google Review */}
       <Section icon={Star} title="Google Review" color="bg-gradient-to-br from-yellow-400 to-amber-500">
         <div>
           <Label>Google Review URL</Label>
@@ -129,7 +174,6 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      {/* Location */}
       <Section icon={MapPin} title="Location & Geofence" color="bg-gradient-to-br from-blue-500 to-indigo-500">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -148,7 +192,6 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      {/* Taxes */}
       <Section icon={Percent} title="Taxes & Charges" color="bg-gradient-to-br from-emerald-500 to-teal-500">
         <div className="grid grid-cols-3 gap-4">
           <div>
@@ -162,6 +205,69 @@ export default function SettingsPage() {
           <div>
             <Label>Currency</Label>
             <Input {...set("currency")} className="mt-1" placeholder="INR" />
+          </div>
+        </div>
+      </Section>
+
+      <Section icon={Database} title="Cache & Data Management" color="bg-gradient-to-br from-violet-500 to-purple-600">
+        <div className="space-y-4">
+          {/* Clear Cache */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-gray-700 font-medium">Clear server-side cache</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Clears in-memory restaurant &amp; menu cache. Customers fetch fresh data on next load.
+              </p>
+            </div>
+            <button
+              onClick={clearCache}
+              disabled={clearing}
+              className="shrink-0 flex items-center gap-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold text-sm px-4 py-2.5 rounded-xl transition-all disabled:opacity-60"
+            >
+              {clearing ? <CheckCircle className="h-4 w-4 text-emerald-500" /> : <Trash2 className="h-4 w-4" />}
+              {clearing ? "Cleared!" : "Clear Cache"}
+            </button>
+          </div>
+
+          <div className="h-px bg-gray-100" />
+
+          {/* Reset Data */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-gray-700 font-medium">Reset all data</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Deletes all orders, sessions, payments &amp; staff requests. Resets tables to available. Keeps menu &amp; settings.
+              </p>
+            </div>
+            {!confirmReset ? (
+              <button
+                onClick={() => setConfirmReset(true)}
+                disabled={resetting}
+                className="shrink-0 flex items-center gap-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-600 font-bold text-sm px-4 py-2.5 rounded-xl transition-all disabled:opacity-60"
+              >
+                <RotateCcw className="h-4 w-4" /> Reset Data
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="flex items-center gap-1 text-xs text-orange-600">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Sure?
+                </span>
+                <button
+                  onClick={resetDemoData}
+                  disabled={resetting}
+                  className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white font-bold text-sm px-3 py-2 rounded-xl transition-all disabled:opacity-60"
+                >
+                  {resetting ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  {resetting ? "Resetting…" : "Yes, Reset"}
+                </button>
+                <button
+                  onClick={() => setConfirmReset(false)}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </Section>
