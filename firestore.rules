@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function restaurantId(rid) {
+      return get(/databases/$(database)/documents/restaurants/$(rid)/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(rid, role) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/restaurants/$(rid)/users/$(request.auth.uid)) &&
+        restaurantId(rid).role == role;
+    }
+
+    function isOwner(rid) { return hasRole(rid, 'OWNER'); }
+    function isManager(rid) { return hasRole(rid, 'MANAGER'); }
+    function isKitchen(rid) { return hasRole(rid, 'KITCHEN'); }
+    function isStaff(rid) { return isOwner(rid) || isManager(rid) || isKitchen(rid); }
+    function isOwnerOrManager(rid) { return isOwner(rid) || isManager(rid); }
+
+    // ── Table token index (public read for QR lookup) ─────────────────────
+    match /tableTokens/{token} {
+      allow read: if true;
+      allow write: if false; // written only by Cloud Functions / server
+    }
+
+    // ── Restaurants ───────────────────────────────────────────────────────
+    match /restaurants/{rid} {
+      allow read: if isStaff(rid);
+      allow create: if isSignedIn();
+      allow update: if isOwnerOrManager(rid);
+      allow delete: if isOwner(rid);
+
+      // Users sub-collection
+      match /users/{uid} {
+        allow read: if isStaff(rid);
+        allow write: if isOwner(rid);
+      }
+
+      // Tables
+      match /tables/{tableId} {
+        allow read: if true; // customers need to read table info
+        allow create, update, delete: if isOwnerOrManager(rid);
+      }
+
+      // Menu categories
+      match /menuCategories/{catId} {
+        allow read: if true;
+        allow write: if isOwnerOrManager(rid);
+      }
+
+      // Menu items
+      match /menuItems/{itemId} {
+        allow read: if true;
+        allow write: if isOwnerOrManager(rid);
+      }
+
+      // Sessions — customers create, staff read
+      match /sessions/{sessionId} {
+        allow read: if isStaff(rid) || resource.data.status == 'ACTIVE';
+        allow create: if true; // customers create sessions
+        allow update: if isOwnerOrManager(rid) ||
+          // customers can only update their own active session to COMPLETED
+          (resource.data.status == 'ACTIVE' && request.resource.data.status == 'COMPLETED');
+        allow delete: if isOwner(rid);
+      }
+
+      // Orders
+      match /orders/{orderId} {
+        allow read: if isStaff(rid) || resource.data.sessionId == request.auth.uid;
+        allow create: if true; // customers place orders
+        allow update: if
+          // Kitchen can update status to ACCEPTED/PREPARING/READY/SERVED
+          (isKitchen(rid) && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'acceptedAt', 'preparingAt', 'readyAt', 'servedAt'])) ||
+          // Manager/Owner can update anything
+          isOwnerOrManager(rid);
+        allow delete: if isOwner(rid);
+      }
+
+      // Payments — only staff can create/update
+      match /payments/{paymentId} {
+        allow read: if isStaff(rid) || resource.data.sessionId != null;
+        allow create: if isOwnerOrManager(rid);
+        allow update: if isOwnerOrManager(rid);
+        allow delete: if isOwner(rid);
+      }
+
+      // Staff requests — customers create, staff read/update
+      match /staffRequests/{reqId} {
+        allow read: if isStaff(rid);
+        allow create: if true;
+        allow update: if isStaff(rid);
+        allow delete: if isOwnerOrManager(rid);
+      }
+
+      // Audit logs — staff read, system writes
+      match /auditLogs/{logId} {
+        allow read: if isOwnerOrManager(rid);
+        allow create: if isStaff(rid);
+        allow update, delete: if false;
+      }
+    }
+  }
+}
